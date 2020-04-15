@@ -1,0 +1,13 @@
+# Set global options
+data_dir = "/var/lib/vector"
+
+[sources.from_file]
+  type = "file"
+  include = ["/var/log/nginx/*.log"]
+
+[sinks.to_broker]
+  type = "kafka"
+  inputs = ["from_file"]
+  bootstrap_servers = "kafka:29092"
+  topic = "events"
+  encoding = "json"

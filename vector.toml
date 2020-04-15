@@ -1,0 +1,51 @@
+# Set global options
+data_dir = "/var/lib/vector"
+
+[sources.from_broker]
+  type = "kafka"
+  bootstrap_servers = "kafka:29092"
+  group_id = "vector-consumer"
+  topics = ["events"]
+
+[transforms.json_parser]
+  type   = "json_parser"
+  inputs = ["from_broker"]
+  drop_field = true
+  field = "message"
+
+[transforms.log_parser]
+  type   = "grok_parser"
+  inputs = ["json_parser"]
+  pattern = '%{IPORHOST:client} - %{USERNAME:user} \[%{HTTPDATE:timestamp}\] \"%{WORD:verb} %{NOTSPACE:path} HTTP/%{NUMBER}\" %{INT:status} %{NUMBER:bytes} \"%{DATA:referer}\" \"%{DATA:user_agent}\"'
+  types.status = "int"
+  types.bytes = "int"
+  types.timestamp = "timestamp|%d/%b/%Y:%H:%M:%S %z"
+
+[sinks.to_indexer]
+  type = "elasticsearch"
+  inputs = ["log_parser"]
+  healthcheck = false
+  host = "http://elasticsearch:9200"
+
+[[tests]]
+  name = "test_log_parser"
+
+  [[tests.inputs]]
+    insert_at = "json_parser"
+    type = "raw"
+    value = '172.21.0.1 - - [28/Feb/2020:12:38:46 +0000] "GET /path/to/a HTTP/1.1" 200 46459 "http://localhost/path/to/b" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.122 Safari/537.36" "-"'
+
+  [[tests.outputs]]
+    extract_from = "log_parser"
+
+    [[tests.outputs.conditions]]
+      type = "check_fields"
+      "client.equals" = "172.21.0.1"
+      "user.equals" = "-"
+      "timestamp.equals"= "2020-02-28T12:38:46Z"
+      "verb.equals" = "GET"
+      "path.equals" = "/path/to/a"
+      "status.equals" = 200
+      "bytes.equals" = 46459
+      "referer.equals" = "http://localhost/path/to/b"
+      "user_agent.equals" = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.122 Safari/537.36"
